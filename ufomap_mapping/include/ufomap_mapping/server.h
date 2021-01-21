@@ -59,6 +59,7 @@
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 
 // STD
+#include <future>
 #include <variant>
 #include <vector>
 
@@ -67,7 +68,7 @@ namespace ufomap_mapping
 class Server
 {
  public:
-	Server(ros::NodeHandle &nh, ros::NodeHandle &nh_priv, bool multithreaded);
+	Server(ros::NodeHandle &nh, ros::NodeHandle &nh_priv);
 
  private:
 	void cloudCallback(sensor_msgs::PointCloud2::ConstPtr const &msg);
@@ -146,6 +147,7 @@ class Server
 	bool compress_;
 	bool update_part_of_map_;
 	ufo::map::DepthType publish_depth_;
+	std::future<void> update_async_handler_;
 
 	//
 	// Information

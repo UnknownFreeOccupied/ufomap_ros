@@ -52,12 +52,12 @@ int main(int argc, char** argv)
 	ros::NodeHandle nh;
 	ros::NodeHandle nh_priv("~");
 
-	bool multithreaded = nh_priv.param("multithreaded", false);
+	int num_workers = nh_priv.param("num_workers", 1);
 
-	ufomap_mapping::Server server(nh, nh_priv, multithreaded);
+	ufomap_mapping::Server server(nh, nh_priv);
 
-	if (multithreaded) {
-		ros::MultiThreadedSpinner spinner(2);
+	if (1 < num_workers) {
+		ros::MultiThreadedSpinner spinner(num_workers);
 		spinner.spin();
 	} else {
 		ros::spin();

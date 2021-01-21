@@ -52,18 +52,19 @@
 
 namespace ufomap_mapping
 {
-Server::Server(ros::NodeHandle &nh, ros::NodeHandle &nh_priv, bool multithreaded)
+Server::Server(ros::NodeHandle &nh, ros::NodeHandle &nh_priv)
     : nh_(nh), nh_priv_(nh_priv), tf_listener_(tf_buffer_), cs_(nh_priv)
 {
 	// Set up map
 	double resolution = nh_priv_.param("resolution", 0.1);
 	ufo::map::DepthType depth_levels = nh_priv_.param("depth_levels", 16);
-	bool auto_pruning = !multithreaded;
 
+	// Automatic pruning is disabled so we can work in multiple threads for subscribers,
+	// services and publishers
 	if (nh_priv_.param("color_map", false)) {
-		map_.emplace<ufo::map::OccupancyMapColor>(resolution, depth_levels, auto_pruning);
+		map_.emplace<ufo::map::OccupancyMapColor>(resolution, depth_levels, false);
 	} else {
-		map_.emplace<ufo::map::OccupancyMap>(resolution, depth_levels, auto_pruning);
+		map_.emplace<ufo::map::OccupancyMap>(resolution, depth_levels, false);
 	}
 
 	// Enable min/max change detection
@@ -111,9 +112,11 @@ void Server::cloudCallback(sensor_msgs::PointCloud2::ConstPtr const &msg)
 			    ufo::map::PointCloudColor cloud;
 			    ufomap_ros::rosToUfo(*msg, cloud);
 			    cloud.transform(transform, true);
+
 			    map.insertPointCloudDiscrete(transform.translation(), cloud, max_range_,
 			                                 insert_depth_, simple_ray_casting_,
 			                                 early_stopping_);
+
 			    std::chrono::duration<double, std::milli> elapsed =
 			        std::chrono::steady_clock::now() - start;
 			    double integration_time = elapsed.count();
@@ -151,21 +154,28 @@ void Server::cloudCallback(sensor_msgs::PointCloud2::ConstPtr const &msg)
 			    if (!map_pub_.empty() && update_part_of_map_ && map.validMinMaxChange()) {
 				    start = std::chrono::steady_clock::now();
 
-				    for (int i = 0; i < map_pub_.size(); ++i) {
-					    if (map_pub_[i] &&
-					        (0 < map_pub_[i].getNumSubscribers() || map_pub_[i].isLatched())) {
-						    ufo::geometry::AABB aabb(map.minChange(), map.maxChange());
-						    ufomap_msgs::UFOMapStamped::Ptr msg(new ufomap_msgs::UFOMapStamped);
-						    if (ufomap_msgs::ufoToMsg(map, msg->map, aabb, compress_, i)) {
-							    msg->header.stamp = msg->header.stamp;
-							    msg->header.frame_id = frame_id_;
-							    map_pub_[i].publish(msg);
-						    }
-					    }
+				    if (update_async_handler_.valid()) {
+					    update_async_handler_.wait();
 				    }
 
+				    ufo::geometry::AABB aabb(map.minChange(), map.maxChange());
 				    // TODO: should this be here?
 				    map.resetMinMaxChangeDetection();
+
+				    update_async_handler_ =
+				        std::async(std::launch::async, [this, &aabb, &msg, &map]() {
+					        for (int i = 0; i < map_pub_.size(); ++i) {
+						        if (map_pub_[i] && (0 < map_pub_[i].getNumSubscribers() ||
+						                            map_pub_[i].isLatched())) {
+							        ufomap_msgs::UFOMapStamped::Ptr msg(new ufomap_msgs::UFOMapStamped);
+							        if (ufomap_msgs::ufoToMsg(map, msg->map, aabb, compress_, i)) {
+								        msg->header.stamp = msg->header.stamp;
+								        msg->header.frame_id = frame_id_;
+								        map_pub_[i].publish(msg);
+							        }
+						        }
+					        }
+				        });
 
 				    elapsed = std::chrono::steady_clock::now() - start;
 				    double update_time = elapsed.count();
@@ -183,7 +193,7 @@ void Server::cloudCallback(sensor_msgs::PointCloud2::ConstPtr const &msg)
 		    }
 	    },
 	    map_);
-}  // namespace ufomap_mapping
+}
 
 void Server::publishInfo()
 {
