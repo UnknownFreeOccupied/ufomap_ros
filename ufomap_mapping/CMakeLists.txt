@@ -19,6 +19,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_sensor_msgs
   ufomap_msgs
   ufomap_ros
+  ufomap_srvs
 )
 
 find_package(ufomap REQUIRED)

@@ -25,6 +25,7 @@
   <depend>tf2_sensor_msgs</depend>
   <depend>ufomap_msgs</depend>
   <depend>ufomap_ros</depend>
+  <depend>ufomap_srvs</depend>
 
   <depend>ufomap</depend>
   
