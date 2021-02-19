@@ -108,6 +108,8 @@ class Server
 	unsigned int map_queue_size_;
 	ros::Timer pub_timer_;
 	double pub_rate_;
+	double update_rate_;
+	ros::Time last_update_time_;
 	ros::Publisher info_pub_;
 
 	// Services
@@ -176,6 +178,9 @@ class Server
 	double max_whole_time_ = 0.0;
 	double accumulated_whole_time_ = 0.0;
 	int num_wholes_ = 0;
+
+	// Verbose
+	bool verbose_;
 };
 }  // namespace ufomap_mapping
 

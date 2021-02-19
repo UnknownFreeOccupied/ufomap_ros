@@ -117,9 +117,11 @@ void Server::cloudCallback(sensor_msgs::PointCloud2::ConstPtr const &msg)
 			                                 insert_depth_, simple_ray_casting_,
 			                                 early_stopping_);
 
-			    std::chrono::duration<double, std::milli> elapsed =
-			        std::chrono::steady_clock::now() - start;
-			    double integration_time = elapsed.count();
+			    double integration_time =
+			        std::chrono::duration<float, std::chrono::seconds::period>(
+			            std::chrono::steady_clock::now() - start)
+			            .count();
+
 			    if (0 == num_integrations_ || integration_time < min_integration_time_) {
 				    min_integration_time_ = integration_time;
 			    }
@@ -138,8 +140,10 @@ void Server::cloudCallback(sensor_msgs::PointCloud2::ConstPtr const &msg)
 				                             transform.translation() + r);
 				    map.setValueVolume(aabb, map.getClampingThresMin(), clearing_depth_);
 
-				    elapsed = std::chrono::steady_clock::now() - start;
-				    double clear_time = elapsed.count();
+				    double clear_time =
+				        std::chrono::duration<float, std::chrono::seconds::period>(
+				            std::chrono::steady_clock::now() - start)
+				            .count();
 				    if (0 == num_clears_ || clear_time < min_clear_time_) {
 					    min_clear_time_ = clear_time;
 				    }
@@ -151,7 +155,10 @@ void Server::cloudCallback(sensor_msgs::PointCloud2::ConstPtr const &msg)
 			    }
 
 			    // Publish update
-			    if (!map_pub_.empty() && update_part_of_map_ && map.validMinMaxChange()) {
+			    if (!map_pub_.empty() && update_part_of_map_ && map.validMinMaxChange() &&
+			        (!last_update_time_.isValid() ||
+			         (ros::Time::now() - last_update_time_).toSec() > update_rate_)) {
+				    last_update_time_ = ros::Time::now();
 				    start = std::chrono::steady_clock::now();
 
 				    if (update_async_handler_.valid()) {
@@ -177,8 +184,10 @@ void Server::cloudCallback(sensor_msgs::PointCloud2::ConstPtr const &msg)
 					        }
 				        });
 
-				    elapsed = std::chrono::steady_clock::now() - start;
-				    double update_time = elapsed.count();
+				    double update_time =
+				        std::chrono::duration<float, std::chrono::seconds::period>(
+				            std::chrono::steady_clock::now() - start)
+				            .count();
 				    if (0 == num_updates_ || update_time < min_update_time_) {
 					    min_update_time_ = update_time;
 				    }
@@ -197,6 +206,30 @@ void Server::cloudCallback(sensor_msgs::PointCloud2::ConstPtr const &msg)
 
 void Server::publishInfo()
 {
+	if (verbose_) {
+		printf("\nTimings:\n");
+		if (0 != num_integrations_) {
+			printf("\tIntegration time (s): %5d %09.6f\t(%09.6f +- %09.6f)\n",
+			       num_integrations_, accumulated_integration_time_,
+			       accumulated_integration_time_ / num_integrations_, max_integration_time_);
+		}
+		if (0 != num_clears_) {
+			printf("\tClear time (s):       %5d %09.6f\t(%09.6f +- %09.6f)\n", num_clears_,
+			       accumulated_clear_time_, accumulated_clear_time_ / num_clears_,
+			       max_clear_time_);
+		}
+		if (0 != num_updates_) {
+			printf("\tUpdate time (s):      %5d %09.6f\t(%09.6f +- %09.6f)\n", num_updates_,
+			       accumulated_update_time_, accumulated_update_time_ / num_updates_,
+			       max_update_time_);
+		}
+		if (0 != num_wholes_) {
+			printf("\tWhole time (s):       %5d %09.6f\t(%09.6f +- %09.6f)\n", num_wholes_,
+			       accumulated_whole_time_, accumulated_whole_time_ / num_wholes_,
+			       max_whole_time_);
+		}
+	}
+
 	if (info_pub_ && 0 < info_pub_.getNumSubscribers()) {
 		diagnostic_msgs::DiagnosticStatus msg;
 		msg.level = diagnostic_msgs::DiagnosticStatus::OK;
@@ -247,9 +280,9 @@ void Server::mapConnectCallback(ros::SingleSubscriberPublisher const &pub, int d
 				    pub.publish(msg);
 			    }
 
-			    std::chrono::duration<double, std::milli> elapsed =
-			        std::chrono::steady_clock::now() - start;
-			    double whole_time = elapsed.count();
+			    double whole_time = std::chrono::duration<float, std::chrono::seconds::period>(
+			                            std::chrono::steady_clock::now() - start)
+			                            .count();
 			    if (0 == num_wholes_ || whole_time < min_whole_time_) {
 				    min_whole_time_ = whole_time;
 			    }
@@ -339,9 +372,10 @@ void Server::timerCallback(ros::TimerEvent const &event)
 							    map_pub_[i].publish(msg);
 						    }
 
-						    std::chrono::duration<double, std::milli> elapsed =
-						        std::chrono::steady_clock::now() - start;
-						    double whole_time = elapsed.count();
+						    double whole_time =
+						        std::chrono::duration<float, std::chrono::seconds::period>(
+						            std::chrono::steady_clock::now() - start)
+						            .count();
 						    if (0 == num_wholes_ || whole_time < min_whole_time_) {
 							    min_whole_time_ = whole_time;
 						    }
@@ -363,6 +397,8 @@ void Server::configCallback(ufomap_mapping::ServerConfig &config, uint32_t level
 {
 	// Read parameters
 	frame_id_ = config.frame_id;
+
+	verbose_ = config.verbose;
 
 	max_range_ = config.max_range;
 	insert_depth_ = config.insert_depth;
@@ -422,6 +458,8 @@ void Server::configCallback(ufomap_mapping::ServerConfig &config, uint32_t level
 			pub_timer_.stop();
 		}
 	}
+
+	update_rate_ = config.update_rate;
 }
 
 }  // namespace ufomap_mapping
