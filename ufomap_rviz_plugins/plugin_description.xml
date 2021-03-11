@@ -3,5 +3,6 @@
     <description>
       Displays a UFOMap.
     </description>
+    <message_type>ufomap_msgs/UFOMapStamped</message_type>
   </class>
 </library>
