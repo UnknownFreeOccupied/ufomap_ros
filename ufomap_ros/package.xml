@@ -17,7 +17,6 @@
   <depend>sensor_msgs</depend>
 
   <build_depend>ufomap</build_depend>
-  <build_depend>ufomath</build_depend>
   
   <doc_depend>doxygen</doc_depend>
 
